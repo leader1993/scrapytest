@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+#conding:utf8
+
+import requests
+from lxml import etree
+import re
+import xlwt
+
+
+
+class ZDspider(object):
+    def __init__(self):
+        self.url = 'http://www.ireadweek.com/index.php?g=portal&m=index&a=index&p='
+        self.header = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
+        }
+        #self.book_list = []
+        self.session = requests.Session()
+        self.nums = 0
+        self.sheet = None
+    #创建excal
+    def create_excal(self):
+        ZD_book = xlwt.Workbook(encoding='utf-8')
+        sheet = ZD_book.add_sheet('Sheet1')
+        sheet.write(0, 4, '百度网盘链接')
+        sheet.write(0, 3, '豆瓣评分')
+        sheet.write(0, 2, '作者')
+        sheet.write(0, 1, '书名')
+        sheet.write(0, 0, '分类')
+        self.sheet = sheet
+        return ZD_book
+
+    #获取每一页的url，同时调用获取该页数据的方法
+    def get_pear_urls(self):
+        #获取excai
+        ZD_book = self.create_excal()
+        for i in range(6):
+            i+=1
+            url = self.url + str(i)
+            self.get_pear_bookurl(url)
+        #将数据保存进excal
+        ZD_book.save('zd1.xls')
+
+    #获取该页每个每个标签的数据，同事调用处理方法
+    def get_pear_bookurl(self,url):
+        #获取详情页
+        response = self.session.get(url,headers=self.header).text
+        html = etree.HTML(response)
+        #pattern = re.c
+        book_url_list = html.xpath('//ul[@class="hanghang-list"]/a/@href')
+        for u in book_url_list:
+            bookurl = 'http://www.ireadweek.com/'+ u
+            self.get_book_baidu_url(bookurl)
+
+    #根据bookurl获取详细页，对信息进行筛选
+    def get_book_baidu_url(self,url):
+        response = self.session.get(url,headers=self.header).text
+        html = etree.HTML(response)
+        book_dict = {}
+        book_dict['title']= html.xpath('//div[@class="hanghang-za-title"]')[0].text
+        result_data = html.xpath('//div[@class="hanghang-shu-content-font"]/p')[0:4]
+        book_dict['name'] = result_data[0].text
+        book_dict['auth'] = result_data[1].text
+        book_dict['score'] = result_data[3].text
+        book_dict['baidu'] = html.xpath('//div[@class="hanghang-shu-content-btn"]/a[1]/@href')
+        #booklist = self.book_list.append(book_dict)
+        #self.writeExcal(booklist)
+        self.nums+=1
+        nums = self.nums
+        #开始写入excal
+        self.add_sheet(nums,book_dict)
+
+    def add_sheet(self, nums, book_dict):
+        self.sheet.write(nums, 4, book_dict['baidu'])
+        self.sheet.write(nums, 3, book_dict['score'])
+        self.sheet.write(nums, 2, book_dict['auth'])
+        self.sheet.write(nums, 1, book_dict['name'])
+        self.sheet.write(nums, 0, book_dict['title'])
+
+'''
+    def writeExcal(self,booklist):
+        with open('zhoudu.json','a') as f:
+            f.write(booklist)
+'''
+if __name__ == "__main__":
+    zd = ZDspider()
+    zd.get_pear_urls()
