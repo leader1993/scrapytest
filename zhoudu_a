@@ -1,0 +1,92 @@
+```ruby
+import requests
+from lxml import etree
+import re
+import xlwt
+
+import MySQLdb
+'''
+增加数据库管理工具dbutils
+'''
+import base64
+from dbutils import  ZDdbutils
+
+class ZDspider(object):
+    def __init__(self):
+        self.url = 'http://www.ireadweek.com/index.php?g=portal&m=index&a=index&p='
+        self.header = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
+        }
+        #self.book_list = []
+        self.session = requests.Session()
+        self.nums = 0
+        self.sheet = None
+        self.pattern = re.compile(r'[\u4e00-\u9fa5]+')
+        self.pattern1 = re.compile(r'\d\.?\d?')
+        #self.cs1 = None
+       # self.sql_list = []
+        self.db = ZDdbutils(host='localhost', port=3306, db='zhoudu', user='root', passwd='root', charset='utf8')
+        self.fill = '对不起，我是空值！'
+
+    #获取每一页的url，同时调用获取该页数据的方法
+    def get_pear_urls(self):
+        self.db.connet()
+        for i in range(10):
+            i+=1
+            url = self.url + str(i)
+            self.get_pear_bookurl(url)
+        self.db.close()
+        print('成功写入数据库，可以到数据库中取看数据了')
+
+    #获取该页每个每个标签的数据，同事调用处理方法
+    def get_pear_bookurl(self,url):
+        #获取详情页
+        response = self.session.get(url,headers=self.header).text
+        html = etree.HTML(response)
+        #pattern = re.c
+        book_url_list = html.xpath('//ul[@class="hanghang-list"]/a/@href')
+        for u in book_url_list:
+            bookurl = 'http://www.ireadweek.com/'+ u
+            self.get_book_baidu_url(bookurl)
+
+    #根据bookurl获取详细页，对信息进行筛选
+    def get_book_baidu_url(self,url):
+        response = self.session.get(url,headers=self.header).text
+        html = etree.HTML(response)
+        book_dict = {}
+        book_dict['title']= html.xpath('//div[@class="hanghang-za-title"]')[0].text
+        result_data = html.xpath('//div[@class="hanghang-shu-content-font"]/p')[0:4]
+        #通过正则表达式对中文和小数进行截取
+        #name
+        name = self.pattern.findall(result_data[0].text)[1]
+        #使用三元运算符
+        book_dict['name'] = name if name else self.fill
+        #auth
+        auth = self.pattern.findall(result_data[1].text)
+        book_dict['auth'] = auth[len(auth)-1] if auth else self.fill
+        #scroe
+        score = self.pattern1.findall(result_data[3].text)[0]
+        book_dict['score'] = score if score else self.fill
+        #处理第一行没有百度链接book_dict['baidu']
+        #baiduurl
+        baidu_url = html.xpath('//div[@class="hanghang-shu-content-btn"]/a[1]/@href')
+        if baidu_url:
+            book_dict['baidu'] = baidu_url[0]
+        else:
+            book_dict['baidu'] = 'http:www.baidu.com'
+
+        #爬取图片
+        img_url = 'http://www.ireadweek.com' + html.xpath('//div[@class="hanghang-shu-content-img"]/img/@src')[0]
+        #保存链接
+        book_dict['img_url'] = img_url
+        sql = "insert into zdbooks_1(title,name,auth,score,baiduyunurl,imgurl) values('{}','{}','{}',{},'{}','{}')".\
+            format(book_dict['title'],book_dict['name'],book_dict['auth'],book_dict['score'],book_dict['baidu'],book_dict['img_url'] )
+        self.db.insert(sql)
+        print('======================================')
+        self.nums += 1
+        print(self.nums)
+
+if __name__ == "__main__":
+    zd = ZDspider()
+    zd.get_pear_urls()
+   ```
